@@ -1604,3 +1604,102 @@ export async function deleteRecording(recordingId: string) {
     });
   }
 }
+
+export async function getRooms() {
+  try {
+    const database = await initializeDb();
+    const classroomResponse = await database
+      .select({
+        classroom_id: classrooms.id,
+        classroom_name: classrooms.name,
+        classroom_description: classrooms.description,
+      })
+      .from(classrooms)
+      .innerJoin(
+        classroom_roles,
+        eq(classroom_roles.classroom_id, classrooms.id)
+      );
+
+    if (classroomResponse.length == 0) {
+      return await JSON.stringify({
+        status: 200,
+        message: "No classrooms found",
+      });
+    }
+
+    let instructorResponse: any[] = [];
+    if (classroomResponse.length > 0) {
+      instructorResponse = await database
+        .select({
+          classroom_id: classroom_roles.classroom_id,
+          instructor: users.name,
+        })
+        .from(classroom_roles)
+        .innerJoin(users, eq(users.id, classroom_roles.user_id))
+        .where(
+          and(
+            inArray(
+              classroom_roles.classroom_id,
+              classroomResponse.map((c) => c.classroom_id)
+            ),
+            eq(classroom_roles.role, "Instructor")
+          )
+        );
+    }
+    const combinedReponse = classroomResponse.map((c) => {
+      const instructor = instructorResponse.find(
+        (i) => i.classroom_id === c.classroom_id
+      );
+      return { ...c, instructor: instructor?.instructor };
+    });
+
+    return await JSON.stringify({
+      status: 200,
+      data: combinedReponse,
+    });
+  } catch (error) {
+    console.log(error);
+    return await JSON.stringify({
+      status: 500,
+      message: "An error occurred while getting classrooms",
+    });
+  }
+}
+
+export async function dreamJoinRoom(classroomId: string) {
+  try {
+    const database = await initializeDb();
+    const classroomResponse = await database
+      .select({
+        classroom_id: classrooms.id,
+        classroom_name: classrooms.name,
+        classroom_description: classrooms.description,
+        classroom_instructor: classrooms.created_by,
+      })
+      .from(classrooms)
+      .where(eq(classrooms.id, classroomId))
+      .limit(1); // Filter by student ID
+
+    if (classroomResponse.length == 0) {
+      return await JSON.stringify({
+        status: 404,
+        message: "Classroom not found",
+      });
+    }
+
+    return await JSON.stringify({
+      status: 200,
+      user_name: "Dream Kit",
+      instructor: true,
+      data: classroomResponse[0],
+      token: process.env.VIDEOSDK_TOKEN,
+    });
+  } catch (error) {
+    console.log(error);
+    return await JSON.stringify({
+      status: 500,
+      message: "An error occurred while getting classrooms",
+    });
+  }
+}
+
